@@ -1,2 +1,4 @@
 html/
 notebooks/
+reports/
+__pycache__
