@@ -1,2 +1,2 @@
 #!/bin/sh
-cd notebooks && wget "https://raw.githubusercontent.com$1"
+cd notebooks && wget -q "https://raw.githubusercontent.com$1"
