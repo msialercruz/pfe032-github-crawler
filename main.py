@@ -40,8 +40,6 @@ def get_repos(html_path):
                 print(f"No links found in {filepath}")
     return repos
 
-# microsoft-tensorwatch.html
-
 def get_notebooks(repos):
     if (file_count("html/notebooks/") == 0):
         for owner, repo in repos:
@@ -71,4 +69,6 @@ max_page = get_max_page()
 repos = get_repos(max_page)
 notebooks = get_notebooks(repos)
 dl_notebooks(notebooks)
-run_sh("move")
+run_sh("mv_invalid")
+run_sh("mv_valid")
+run_sh("convert")

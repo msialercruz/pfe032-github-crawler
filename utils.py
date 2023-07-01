@@ -2,7 +2,7 @@ import subprocess, time
 
 def run_sh(filename, *args):
     # print(["sh", f"scripts/{filename}.sh"] + list(args))
-    return subprocess.check_output(["sh", f"scripts/{filename}.sh"] + list(args))
+    return subprocess.check_output(["sh", f"scripts/{filename}.sh"] + list(args)).decode("utf-8")
 
 def time_decorator(func):
     def inner(*args, **kwargs):
