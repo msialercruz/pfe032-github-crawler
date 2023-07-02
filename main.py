@@ -1,5 +1,6 @@
 #!/bin/python3
-import os, subprocess
+import os, subprocess, csv
+import db
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
@@ -41,11 +42,12 @@ def get_repos(html_path):
     return repos
 
 def get_notebooks(repos):
+    repo_infos = []
     if (file_count("html/notebooks/") == 0):
         for owner, repo in repos:
-            run_sh("getnb", owner, repo)
+            repo_infos.append(run_sh("getnb", owner, repo).split("\n"))
     notebooks = []
-    for nb_html_filename in os.listdir("html/notebooks/"):
+    for nb_html_filename, owner, repo in repo_infos:
         filepath = f"html/notebooks/{nb_html_filename}"
         with open(filepath, "r") as f:
             html_doc = f.read()
@@ -55,20 +57,26 @@ def get_notebooks(repos):
                 for nb_link in links:
                     url = urlparse(f"https://github.com{nb_link['href']}")
                     if (url.path != ""):
-                        notebooks.append(url.path.replace('/blob', ''))
+                        repo_url = f"https://github.com/{owner}/{repo}"
+                        notebooks.append((url.path.replace('/blob', ''), repo_url))
             else:
                 print(f"No links found in {filepath}")
     return notebooks
 
 def dl_notebooks(notebooks):
-    first = ["dlnb" for _ in notebooks]
     with ThreadPoolExecutor() as executor:
-        executor.map(run_sh, first, notebooks)
+        scripts = ["dlnb" for _ in notebooks]
+        nb_urls = [nb_url for nb_url, _ in notebooks]
+        executor.map(run_sh, scripts, nb_urls)
+
+    db.insert_notebooks(notebooks)
+
+    # # moving notebooks in folders
+    # run_sh("mv_invalid")
+    # run_sh("mv_valid")
+    # run_sh("convert")
 
 max_page = get_max_page()
 repos = get_repos(max_page)
 notebooks = get_notebooks(repos)
 dl_notebooks(notebooks)
-run_sh("mv_invalid")
-run_sh("mv_valid")
-run_sh("convert")
