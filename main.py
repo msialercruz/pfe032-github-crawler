@@ -2,14 +2,15 @@
 import os, subprocess, csv
 import db
 from concurrent.futures import ThreadPoolExecutor
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 from bs4 import BeautifulSoup
 from utils import run_sh
 
 SEARCH_REPOS_BASE_URL = "https://github.com/search?q=created%3A%3E2023-05-01+created%3A%3C2023-05-31+language%3A%22Jupyter+Notebook%22+license%3Amit+machine+learning&type=repositories&ref=advsearch"
 
-def file_count(directory):
-    return len(os.listdir(directory))
+def file_count(directory, ext=None):
+    files = os.listdir(directory) if not ext else [f for f in os.listdir() if f.endswith(ext)]
+    return len(files)
 
 def get_max_page():
     if (not os.path.isfile("html/max_page.html")):
@@ -43,12 +44,15 @@ def get_repos(html_path):
 
 def get_notebooks(repos):
     repo_infos = []
-    if (file_count("html/notebooks/") == 0):
+    if (file_count("html/notebooks/", "ipynb") == 0):
         for owner, repo in repos:
-            repo_infos.append(run_sh("getnb", owner, repo).split("\n"))
+            info = run_sh("getnb", owner, repo).strip().split("\n")
+            if len(info) == 3:
+                repo_infos.append(info)
+            else:
+                print(info)
     notebooks = []
-    for nb_html_filename, owner, repo in repo_infos:
-        filepath = f"html/notebooks/{nb_html_filename}"
+    for filepath, owner, repo in repo_infos:
         with open(filepath, "r") as f:
             html_doc = f.read()
             soup = BeautifulSoup(html_doc, 'html.parser')
@@ -58,23 +62,25 @@ def get_notebooks(repos):
                     url = urlparse(f"https://github.com{nb_link['href']}")
                     if (url.path != ""):
                         repo_url = f"https://github.com/{owner}/{repo}"
-                        notebooks.append((url.path.replace('/blob', ''), repo_url))
+                        notebooks.append((url.path.replace('/blob', ''), url.path))
             else:
                 print(f"No links found in {filepath}")
     return notebooks
 
 def dl_notebooks(notebooks):
-    with ThreadPoolExecutor() as executor:
-        scripts = ["dlnb" for _ in notebooks]
-        nb_urls = [nb_url for nb_url, _ in notebooks]
-        executor.map(run_sh, scripts, nb_urls)
 
+    with ThreadPoolExecutor() as executor:
+        executor.map(run_sh,
+                     ["dlnb" for _ in notebooks],
+                     [nb_raw_url for nb_raw_url, _ in notebooks])
+
+    db.clear_notebooks()
+    notebooks = [(f"https://github.com{nb_url}", unquote(f"./notebooks/{nb_url.split('/')[-1]}")) for nb_raw_url, nb_url in notebooks]
     db.insert_notebooks(notebooks)
 
-    # # moving notebooks in folders
-    # run_sh("mv_invalid")
-    # run_sh("mv_valid")
-    # run_sh("convert")
+    # moving notebooks in folders
+    run_sh("mv_invalid")
+    run_sh("mv_valid")
 
 max_page = get_max_page()
 repos = get_repos(max_page)
