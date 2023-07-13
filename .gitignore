@@ -3,3 +3,9 @@ notebooks/
 reports/
 __pycache__
 cookies.txt
+*.bak
+lib/
+bin/
+etc/
+share/
+pyvenv.cfg
