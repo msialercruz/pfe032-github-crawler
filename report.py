@@ -48,7 +48,7 @@ def analyze_all():
     with open("./notebooks/nb_locations.json", "r", encoding="utf-8") as f:
         notebooks = json.loads(f.read())
 
-    with ThreadPoolExecutor(2) as ex:
+    with ThreadPoolExecutor(max_workers=5) as ex:
         return ex.map(get_analysis_result, notebooks)
 
 
