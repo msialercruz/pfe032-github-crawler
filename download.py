@@ -32,52 +32,38 @@ def get_max_page():
 
 
 def get_repos():
-    def _get_repos(page):
-        page_repos = []
+    _repos = []
+    for page in range(1, max_page + 1):
         url = f"{SEARCH_URL}&p={page}"
         res = requests.get(url, headers=get_headers())
         soup = BeautifulSoup(res.text, "html.parser")
         links = soup.select(".Text-sc-17v1xeu-0.qaOIC.search-match")
-        if len(links) > 0:
-            for repo_link in links:
-                page_repos.append(repo_link.get_text().split("/"))
-        else:
-            print(f"No links found in {url}")
-        return page_repos
-
-    with ThreadPoolExecutor() as ex:
-        _repos = ex.map(_get_repos, (i for i in range(1, max_page + 1)))
-        print(len(_repos))
-        return [repo for page_repos in _repos for repo in page_repos]
+        print(f"[{page:03d}/{max_page}] {len(links)} links found in {url}")
+        for repo_link in links:
+            _repos.append(repo_link.get_text().split("/"))
+    return _repos
 
 
 def get_notebooks():
-    def _get_notebooks(_repo):
-        repo_notebooks = []
+    _notebooks = []
+    _total = len(repos)
+    for i, _repo in enumerate(repos):
         owner, repo = _repo
         url = f"https://github.com/search?q=repo%3A{owner}%2F{repo}+path%3A*.ipynb+fit&type=code"
         res = requests.get(url, headers=get_headers())
         soup = BeautifulSoup(res.text, "html.parser")
         links = soup.select(".Link__StyledLink-sc-14289xe-0.faoOkb")
-        if len(links) == 0:
-            print(f"no links found in {url}")
-        else:
-            for nb_link in links:
-                url = urlparse(f"https://github.com{nb_link['href']}")
-                if url.path != "":
-                    repo_notebooks.append(
-                        (
-                            f"https://raw.githubusercontent.com{url.path.replace('/blob', '')}",
-                            f"https://github.com{url.path}",
-                        )
+        print(f"[{(i+1):03d}/{_total}] {len(links)} links found in {url}")
+        for nb_link in links:
+            url = urlparse(f"https://github.com{nb_link['href']}")
+            if url.path != "":
+                _notebooks.append(
+                    (
+                        f"https://raw.githubusercontent.com{url.path.replace('/blob', '')}",
+                        f"https://github.com{url.path}",
                     )
-        return repo_notebooks
-
-    with ThreadPoolExecutor() as ex:
-        _notebooks = ex.map(_get_notebooks, repos)
-        return [
-            notebook for repo_notebooks in _notebooks for notebook in repo_notebooks
-        ]
+                )
+    return _notebooks
 
 
 def download_notebooks():
@@ -87,18 +73,21 @@ def download_notebooks():
         text = res.text
         try:
             _json = json.loads(text)
-        except ValueError as e:
-            print(f"not json {text}")
-            # pass
+        except ValueError:
+            return
 
         # invalid
-        if (
-            not _json
-            or "import tensorflow" in text
-            or len([cell for cell in _json["cells"] if cell["cell_type"] == "code"])
-            == 0
-        ):
+        if "cells" not in _json:
             return None
+        _code_cells = (cell for cell in _json["cells"] if cell["cell_type"] == "code")
+        if (
+            len(list(_code_cells)) == 0
+            or len(
+                [cell for cell in _code_cells if "import tensorflow" in cell["source"]]
+            )
+            > 0
+        ):
+            return
 
         # valid
         filename = unquote(urlparse(nb_raw_url).path.split("/")[-1])
@@ -134,7 +123,7 @@ cookies = get_cookies()
 max_page = get_max_page()
 print("getting repos...")
 repos = get_repos()
-print("getting notebooks...")
+print("\ngetting notebooks...")
 notebooks = get_notebooks()
-print("downloading notebooks...")
+print("\ndownloading notebooks...")
 download_notebooks()
