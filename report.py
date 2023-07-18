@@ -62,6 +62,7 @@ def extract_leakages(res_json):
         )
         return (pre_processing_leakages, overlap_leakages, no_independence_test_data)
     except Exception as e:
+        print(e)
         return (0, 0, 0)
 
 
