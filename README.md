@@ -14,8 +14,9 @@ Ce script se déroule en plusieurs étapes. Voici chaque étape détaillé en or
 
 ### Exécution
 
-1. Installer les dépendances `pip -r requirements.txt`
-2. Exécuter `./download.py` ou `python download.py`
+1. Créer le fichier ``cookies.txt`` et ajouter le contenu d'un cookie Github (requiert d'être connecter avec un compte)
+2. Installer les dépendances `pip -r requirements.txt`
+3. Exécuter `./download.py` ou `python download.py`
 
 ## Script report.py
 
