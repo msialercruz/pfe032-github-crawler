@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-import csv, os, json
-import requests
+from concurrent.futures import ThreadPoolExecutor
+import csv, os, json, requests
 from utils import time_decorator, sizeof_fmt
 
 
@@ -10,15 +10,14 @@ def analyze_nb(nb_path):
     files = {"file": open(nb_path, "rb")}
     res = requests.post("http://localhost:5000/upload", files=files)
     nb_name = res.text
-    res = requests.post(f"http://localhost:5000/analyze/{nb_name}")
+    res = requests.get(f"http://localhost:5000/analyze/{nb_name}")
     return res
 
 
+# pylint: disable=too-many-locals
 def analyze_all():
-    with open("./notebooks/nb_locations.json", "r", encoding="utf-8") as f:
-        notebooks = json.loads(f.read())
-    _results = []
-    for nb_url, nb_path in notebooks:
+    def get_analysis_result(notebook):
+        nb_url, nb_path = notebook
         print(f"analyzing {nb_path}...")
         category_sz = nb_path.split("/")[1]
         nb_size = int(os.path.getsize(nb_path))
@@ -26,6 +25,9 @@ def analyze_all():
         res, analysis_time = analyze_nb(nb_path)
         text = res.text
         status_code = res.status_code
+        with open(nb_path, "r", encoding="utf-8") as f:
+            nb_content = f.read()
+        _cells_info = cells_info(nb_content)
         leakages = extract_leakages(text)
         analysis_status = "Success"
         if status_code != 200:
@@ -33,23 +35,27 @@ def analyze_all():
                 analysis_status = "Timeout"
             else:
                 analysis_status = text
-        _results.append(
-            (
-                nb_url,
-                nb_path,
-                nb_size,
-                nb_size_fmt,
-                analysis_status,
-                analysis_time,
-                *leakages,
-            )
+        return (
+            nb_url,
+            nb_path,
+            nb_size,
+            nb_size_fmt,
+            *_cells_info,
+            analysis_status,
+            analysis_time,
+            *leakages,
         )
-    return _results
+
+    with open("./notebooks/nb_locations.json", "r", encoding="utf-8") as f:
+        notebooks = json.loads(f.read())
+
+    with ThreadPoolExecutor(2) as ex:
+        return ex.map(get_analysis_result, notebooks)
 
 
-def extract_leakages(nb_json):
+def extract_leakages(res_json):
     try:
-        _json = json.loads(nb_json)
+        _json = json.loads(res_json)
         overlap_leakages = int(_json["overlap leakage"]["# detected"])
         pre_processing_leakages = int(_json["pre-processing leakage"]["# detected"])
         no_independence_test_data = int(
@@ -60,8 +66,24 @@ def extract_leakages(nb_json):
         return (0, 0, 0)
 
 
+def cells_info(nb_json):
+    try:
+        _json = json.loads(nb_json)
+        codecells = [cell for cell in _json["cells"] if cell["cell_type"] == "code"]
+        codelines = sum(
+            (
+                len([line for line in cell["source"] if not line.startswith("#")])
+                for cell in codecells
+            )
+        )
+        return (len(codecells), codelines)
+    except Exception as e:
+        print(e)
+        return (0, 0)
+
+
 def save_as_csv():
-    with open("./notebooks/notebook_analysis.csv", "w+", encoding="utf-8") as f:
+    with open("./notebooks/nb_report.csv", "w+", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(
             [
@@ -69,6 +91,8 @@ def save_as_csv():
                 "Location",
                 "File size",
                 "File size formatted",
+                "Code cells",
+                "Code lines",
                 "Analysis status",
                 "Analysis time",
                 "Pre-processing leakages",

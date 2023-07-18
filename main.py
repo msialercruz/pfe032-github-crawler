@@ -47,6 +47,7 @@ def get_repos():
 
     with ThreadPoolExecutor() as ex:
         _repos = ex.map(_get_repos, (i for i in range(1, max_page + 1)))
+        print(len(_repos))
         return [repo for page_repos in _repos for repo in page_repos]
 
 
