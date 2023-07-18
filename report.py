@@ -19,9 +19,8 @@ def analyze_all():
     def get_analysis_result(notebook):
         nb_url, nb_path = notebook
         print(f"analyzing {nb_path}...")
-        category_sz = nb_path.split("/")[1]
         nb_size = int(os.path.getsize(nb_path))
-        nb_size_fmt = sizeof_fmt(int(os.path.getsize(nb_path)))
+        nb_size_fmt = sizeof_fmt(nb_size)
         res, analysis_time = analyze_nb(nb_path)
         text = res.text
         status_code = res.status_code
