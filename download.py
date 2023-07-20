@@ -66,6 +66,7 @@ def get_notebooks():
     return _notebooks
 
 
+# pylint: disable=inconsistent-return-statements
 def download_notebooks():
     def _download_notebook(notebook):
         nb_raw_url, nb_url = notebook
@@ -78,7 +79,7 @@ def download_notebooks():
 
         # invalid
         if "cells" not in _json:
-            return None
+            return
         _code_cells = (cell for cell in _json["cells"] if cell["cell_type"] == "code")
         if (
             len(list(_code_cells)) == 0
