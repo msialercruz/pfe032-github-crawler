@@ -9,10 +9,7 @@ from utils import time_decorator, sizeof_fmt
 @time_decorator
 def analyze_nb(nb_path):
     files = {"file": open(nb_path, "rb")}
-    res = requests.post("http://localhost:5000/upload", files=files)
-    nb_name = res.text
-    res = requests.get(f"http://localhost:5000/analyze/{nb_name}")
-    return res
+    return requests.post("http://localhost:5000/analyze", files=files)
 
 
 # pylint: disable=too-many-locals
@@ -25,22 +22,23 @@ def get_results():
         res, analysis_time = analyze_nb(nb_path)
         text = res.text
         status_code = res.status_code
-        with open(nb_path, "r", encoding="utf-8") as f:
-            nb_content = f.read()
-        _cells_info = cells_info(nb_content)
-        leakages = extract_leakages(text)
-        analysis_status = "Success"
-        if status_code != 200:
-            if analysis_time >= 300 and status_code == 500:
-                analysis_status = "Timeout"
-            else:
-                analysis_status = text
+        # is an error
+        if status_code == 200:
+            content_infos = extract_content_infos(nb_path)
+            analysis_status = "Success"
+            leakages = extract_leakages(text)
+        else:
+            content_infos = (0, 0)
+            analysis_status = (
+                "Timeout" if analysis_time >= 300 else extract_err_msg(text)
+            )
+            leakages = (0, 0, 0)
         return (
             nb_url,
             nb_path,
             nb_size,
             nb_size_fmt,
-            *_cells_info,
+            *content_infos,
             analysis_status,
             analysis_time,
             *leakages,
@@ -53,6 +51,15 @@ def get_results():
         return ex.map(get_result, notebooks)
 
 
+def extract_err_msg(res_json):
+    try:
+        _json = json.loads(res_json)
+        return _json["message"]
+    except Exception as e:
+        print("err extracting err message: ", e)
+        return "ukwnokn"
+
+
 def extract_leakages(res_json):
     try:
         _json = json.loads(res_json)
@@ -63,13 +70,15 @@ def extract_leakages(res_json):
         )
         return (pre_processing_leakages, overlap_leakages, no_independence_test_data)
     except Exception as e:
-        print(e)
+        print("err extracting leakages: ", e)
         return (0, 0, 0)
 
 
-def cells_info(nb_json):
+def extract_content_infos(nb_path):
     try:
-        _json = json.loads(nb_json)
+        with open(nb_path, "r", encoding="utf-8") as f:
+            nb_content = f.read()
+        _json = json.loads(nb_content)
         codecells = [cell for cell in _json["cells"] if cell["cell_type"] == "code"]
         codelines = sum(
             (
@@ -79,7 +88,7 @@ def cells_info(nb_json):
         )
         return (len(codecells), codelines)
     except Exception as e:
-        print(e)
+        print("err extracting content infos: ", e)
         return (0, 0)
 
 
@@ -108,20 +117,11 @@ def save_results():
 def generate_plots():
     with open(results_filepath, "r", encoding="utf-8") as f:
         _results = list(csv.reader(f))[1:]
-    generate_exec_times_per_lines_plot(_results)
     generate_percentage_each_analysis_status_plot(_results)
+    generate_exec_times_per_lines_plot(_results)
+    generate_exec_times_per_cells_plot(_results)
     generate_percentage_each_leakage_type_plot(_results)
     generate_notebooks_by_leakages_quantity_plot(_results)
-
-
-def generate_exec_times_per_lines_plot(_results):
-    lines = [int(r[5]) for r in _results]
-    exec_times = [float(r[7]) for r in _results]
-    plt.xlabel("lines")
-    plt.ylabel("execution time")
-    plt.scatter(lines, exec_times)
-    plt.title("Execution time per lines")
-    plt.savefig(f"{plots_prefix}/01_exec_times_per_lines.png")
 
 
 def generate_percentage_each_analysis_status_plot(_results):
@@ -136,7 +136,32 @@ def generate_percentage_each_analysis_status_plot(_results):
     fig, ax = plt.subplots()
     ax.pie(sizes, labels=labels, autopct="%1.1f%%")
     plt.title("Percentage of each analysis status")
-    plt.savefig(f"{plots_prefix}/02_percentage_each_analysis_status.png")
+    plt.savefig(f"{plots_prefix}/01_percentage_each_analysis_status.png")
+    plt.close()
+
+
+def generate_exec_times_per_lines_plot(_results):
+    _results = [r for r in _results if r[6] != "Timeout"]
+    lines = [int(r[5]) for r in _results]
+    exec_times = [float(r[7]) for r in _results]
+    plt.xlabel("# Lines")
+    plt.ylabel("Execution time (seconds)")
+    plt.scatter(lines, exec_times)
+    plt.title("Execution time per lines")
+    plt.savefig(f"{plots_prefix}/02_exec_times_per_lines.png")
+    plt.close()
+
+
+def generate_exec_times_per_cells_plot(_results):
+    _results = [r for r in _results if r[6] != "Timeout"]
+    cells = [int(r[4]) for r in _results]
+    exec_times = [float(r[7]) for r in _results]
+    plt.xlabel("# Cells")
+    plt.ylabel("Execution time (seconds)")
+    plt.scatter(cells, exec_times)
+    plt.title("Execution time per cells")
+    plt.savefig(f"{plots_prefix}/03_exec_times_per_cells.png")
+    plt.close()
 
 
 def generate_percentage_each_leakage_type_plot(_results):
@@ -145,13 +170,14 @@ def generate_percentage_each_leakage_type_plot(_results):
         "Overlap leakages": 0,
         "No independence test data": 0,
     }
-    notebooks_with_leakages = 0
+    notebooks_count = len(_results)
+    notebooks_with_leakages_count = 0
     for r in _results:
         leakages_count["Pre-processing leakages"] += int(r[8])
         leakages_count["Overlap leakages"] += int(r[9])
         leakages_count["No independence test data"] += int(r[10])
         if int(r[8]) > 0 or int(r[9]) > 0 or int(r[10]) > 0:
-            notebooks_with_leakages += 1
+            notebooks_with_leakages_count += 1
     labels = []
     sizes = []
     for k, v in leakages_count.items():
@@ -160,9 +186,10 @@ def generate_percentage_each_leakage_type_plot(_results):
     fig, ax = plt.subplots()
     ax.pie(sizes, labels=labels, autopct="%1.1f%%")
     plt.title(
-        f"Percentage of each leakage type (found in {notebooks_with_leakages} notebooks)"
+        f"Percentage of each leakage type (found in {notebooks_with_leakages_count} out of {notebooks_count} notebooks)"
     )
-    plt.savefig(f"{plots_prefix}/03_percentage_each_leakage_type.png")
+    plt.savefig(f"{plots_prefix}/04_percentage_each_leakage_type.png")
+    plt.close()
 
 
 def generate_notebooks_by_leakages_quantity_plot(_results):
@@ -184,11 +211,20 @@ def generate_notebooks_by_leakages_quantity_plot(_results):
         sizes.append(v)
     fig, ax = plt.subplots()
     ax.bar(labels, sizes)
-    ax.set_ylabel("notebooks")
+    ax.set_ylabel("# Notebooks")
     ax.set_title(
         f"Notebooks by quantity of leakages (total of {notebooks_count} notebooks)"
     )
-    plt.savefig(f"{plots_prefix}/04_notebooks_by_quantity_leakages.png")
+
+    # inspired by: https://sharkcoder.com/data-visualization/mpl-bar-chart
+    for rect in ax.patches:
+        y = rect.get_height()
+        x = rect.get_x() + rect.get_width() / 2
+        ax.annotate(
+            y, (x, y), xytext=(0, 10), textcoords="offset points", ha="center", va="top"
+        )
+    plt.savefig(f"{plots_prefix}/05_notebooks_by_quantity_leakages.png")
+    plt.close()
 
 
 timestamp = int(time.time())
