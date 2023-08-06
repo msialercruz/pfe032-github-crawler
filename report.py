@@ -93,7 +93,7 @@ def extract_content_infos(nb_path):
 
 
 def save_results():
-    with open(results_filepath, "w+", newline='', encoding="utf-8") as f:
+    with open(results_filepath, "w+", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(
             [
@@ -134,7 +134,9 @@ def generate_percentage_each_analysis_status_plot(_results):
         labels.append(k)
         sizes.append(v)
     fig, ax = plt.subplots()
-    ax.pie(sizes, labels=labels, autopct="%1.1f%%")
+    patches = ax.pie(sizes, labels=labels, autopct="%1.1f%%")
+    for text in patches[1]:
+        text.set_wrap(True)
     plt.title("Percentage of each analysis status")
     plt.savefig(f"{plots_prefix}/01_percentage_each_analysis_status.png")
     plt.close()
@@ -230,9 +232,7 @@ def generate_notebooks_by_leakages_quantity_plot(_results):
 timestamp = int(time.time())
 results = get_results()
 results_filepath = f"./notebooks/nb_results_{timestamp}.csv"
-# results_filepath = f"./notebooks/nb_results_1691279533.csv"
 save_results()
 plots_prefix = f"plots/{timestamp}"
-# plots_prefix = f"plots/1691279533"
 os.makedirs(plots_prefix, exist_ok=True)
 generate_plots()
