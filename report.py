@@ -47,8 +47,8 @@ def get_results():
     with open("./notebooks/nb_locations.json", "r", encoding="utf-8") as f:
         notebooks = json.loads(f.read())
 
-    with ThreadPoolExecutor(max_workers=2) as ex:
-        return ex.map(get_result, notebooks)
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        return ex.map(get_result, notebooks[0:4])
 
 
 def extract_err_msg(res_json):
@@ -93,7 +93,7 @@ def extract_content_infos(nb_path):
 
 
 def save_results():
-    with open(results_filepath, "w+", encoding="utf-8") as f:
+    with open(results_filepath, "w+", newline='', encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(
             [
@@ -230,7 +230,9 @@ def generate_notebooks_by_leakages_quantity_plot(_results):
 timestamp = int(time.time())
 results = get_results()
 results_filepath = f"./notebooks/nb_results_{timestamp}.csv"
+# results_filepath = f"./notebooks/nb_results_1691279533.csv"
 save_results()
 plots_prefix = f"plots/{timestamp}"
+# plots_prefix = f"plots/1691279533"
 os.makedirs(plots_prefix, exist_ok=True)
 generate_plots()
