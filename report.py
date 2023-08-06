@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from concurrent.futures import ThreadPoolExecutor
-import csv, os, time, json, requests
+import scipy.stats as stats
+import csv, os, time, json, requests, statistics
 import matplotlib.pyplot as plt
 from utils import time_decorator, sizeof_fmt
 
@@ -133,7 +134,7 @@ def generate_percentage_each_analysis_status_plot(_results):
     for k, v in status_count.items():
         labels.append(k)
         sizes.append(v)
-    fig, ax = plt.subplots()
+    _, ax = plt.subplots()
     patches = ax.pie(sizes, labels=labels, autopct="%1.1f%%")
     for text in patches[1]:
         text.set_wrap(True)
@@ -143,25 +144,33 @@ def generate_percentage_each_analysis_status_plot(_results):
 
 
 def generate_exec_times_per_lines_plot(_results):
-    _results = [r for r in _results if r[6] != "Timeout"]
+    _results = [r for r in _results if r[6] == "Success"]
+    nb_count = len(_results)
     lines = [int(r[5]) for r in _results]
     exec_times = [float(r[7]) for r in _results]
     plt.xlabel("# Lines")
     plt.ylabel("Execution time (seconds)")
+    # code taken from https://learnpainless.com/how-to-add-correlation-coefficient-to-scatter-plot-in-python/
+    r, p = stats.pearsonr(lines, exec_times)
+    plt.annotate("r = {:.2f}".format(r), xy=(0.7, 0.9), xycoords="axes fraction")
     plt.scatter(lines, exec_times)
-    plt.title("Execution time per lines")
+    plt.title(f"Execution time per lines (calculated for {nb_count} notebooks)")
     plt.savefig(f"{plots_prefix}/02_exec_times_per_lines.png")
     plt.close()
 
 
 def generate_exec_times_per_cells_plot(_results):
-    _results = [r for r in _results if r[6] != "Timeout"]
+    _results = [r for r in _results if r[6] == "Success"]
+    nb_count = len(_results)
     cells = [int(r[4]) for r in _results]
     exec_times = [float(r[7]) for r in _results]
+    # code taken from https://learnpainless.com/how-to-add-correlation-coefficient-to-scatter-plot-in-python/
+    r, p = stats.pearsonr(cells, exec_times)
+    plt.annotate("r = {:.2f}".format(r), xy=(0.7, 0.9), xycoords="axes fraction")
     plt.xlabel("# Cells")
     plt.ylabel("Execution time (seconds)")
     plt.scatter(cells, exec_times)
-    plt.title("Execution time per cells")
+    plt.title(f"Execution time per cells (calculated for {nb_count} notebooks)")
     plt.savefig(f"{plots_prefix}/03_exec_times_per_cells.png")
     plt.close()
 
@@ -185,7 +194,7 @@ def generate_percentage_each_leakage_type_plot(_results):
     for k, v in leakages_count.items():
         labels.append(k)
         sizes.append(v)
-    fig, ax = plt.subplots()
+    _, ax = plt.subplots()
     ax.pie(sizes, labels=labels, autopct="%1.1f%%")
     plt.title(
         f"Percentage of each leakage type (found in {notebooks_with_leakages_count} out of {notebooks_count} notebooks)"
